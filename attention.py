@@ -2,64 +2,54 @@ import torch
 import torch.nn as nn
 
 
-class SelfAttention(nn.Module):
-    def __init__(self, input_dimension, head_dim, seq_len, mask):
-        super(SelfAttention, self).__init__()
-        self.input_dimension = input_dimension
-        self.head_dim = head_dim
-        self.mask = mask
-
-        self.W_q = nn.Linear(input_dimension, head_dim, bias=False)
-        self.W_k = nn.Linear(input_dimension, head_dim, bias=False)
-        self.W_v = nn.Linear(input_dimension, head_dim, bias=False)
-
+class Attention(nn.Module):
+    def __init__(self, seq_len, masked=True):
+        super(Attention, self).__init__()
+        self.masked = masked
+        
+        if self.masked:
+            self.register_buffer("tril", torch.tril(torch.ones(seq_len, seq_len)))
+        
         self.softmax = nn.Softmax(dim=-1)
-        self.register_buffer('tril', torch.tril(torch.ones(seq_len, seq_len)))
-
-
-    def forward(self, query, key, value):
-        Q = self.W_q(query)
-        K = self.W_k(key)
-        V = self.W_v(value)
-        scaled_attention = torch.matmul(Q, K.transpose(-2, -1)) / self.head_dim ** 0.5
-        #where Q, K qnd V are queries, keys and values respectively
-
-        if self.mask:
-            scaled_attention = scaled_attention.masked_fill(self.tril==0, float("-inf"))
-
-        attention_weights = self.softmax(scaled_attention)
-        #return attention_weights
-
-        weighted_value_vectors = torch.matmul(attention_weights, V)
-        return weighted_value_vectors
-
-
-
-
-
-class MultiheadAttention(nn.Module):
-    def __init__(self, input_dimension, num_heads, seq_len, mask):
-        super(MultiheadAttention, self).__init__()
-        assert input_dimension % num_heads == 0
-
-        self.input_dimension = input_dimension
-        self.num_heads = num_heads
-        self.seq_len = seq_len
-        self.mask = mask
-
-        self.head_dim = int(input_dimension / num_heads)
-
-        self.attention_heads = nn.ModuleList(SelfAttention(self.input_dimension, self.head_dim, self.seq_len, self.mask)
-                                             for _ in range(num_heads))
-
-        self.W_o = nn.Linear(self.num_heads * self.head_dim, self.input_dimension, bias=False)
-
-
-    def forward(self, query, key, value):
-        heads = [attention_head(query, key, value) for attention_head in self.attention_heads]
-        heads_contatenation = torch.cat(heads, dim=-1)
-
-        weighted_value_vectors = self.W_o(heads_contatenation)
-
-        return weighted_value_vectors
-
+        
+    def forward(self, keys, queries, values, head_dim):
+        scores = torch.matmul(queries, keys.transpose(-2, -1)) / torch.sqrt(torch.tensor(head_dim).float())
+        
+        if self.masked:
+            scores = scores.masked_fill(self.tril==0, float("-inf"))
+            
+        attention_weights = self.softmax(scores)
+        attention_weights = self.attention_dropout(attention_weights)
+        
+        attention_vectors = torch.matmul(attention_weights, values)
+        return attention_vectors
+    
+class MultiHeadAttention(nn.Module):
+    def __init__(self, model_dim, head_dim, num_of_heads, seq_len, masked=True):
+        super(MultiHeadAttention, self).__init__()
+        self.head_dim = head_dim
+        self.W_q = nn.Linear(model_dim, self.head_dim, bias=False)
+        self.W_k = nn.Linear(model_dim, self.head_dim, bias=False)
+        self.W_v = nn.Linear(model_dim, self.head_dim, bias=False)
+    
+        self.attention_heads = nn.ModuleList(Attention(seq_len, masked) 
+                                             for _ in range(num_of_heads))
+        self.W_o = nn.Linear(num_of_heads*self.head_dim, model_dim, bias=False)
+        
+    def _linear_projection(self, X):
+        W = nn.Linear(X.size(-1), self.head_dim, bias=False)
+        return W(X)
+        
+    def forward(self, keys, queries, values):
+        heads = [attention_head(self._linear_projection(keys), 
+                                    self._linear_projection(queries), 
+                                    self._linear_projection(values), 
+                                    self.head_dim
+                                )
+                    for attention_head in self.attention_heads
+                ]
+            
+        concatenated_heads = torch.cat(heads, dim=-1)
+        attention_vectors = self.W_o(concatenated_heads)
+        
+        return attention_vectors

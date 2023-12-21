@@ -1,154 +1,122 @@
+from attention import MultiHeadAttention
+from embedding_layer import EmbeddingLayer, PositionWiseFeedForwardNet
 import torch
 import torch.nn as nn
-from attention import MultiheadAttention
-from embedding_layer import EmbeddingLayer, PositionwiseFeedforward
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, input_dimension, num_heads, seq_len, width_factor=4):
+    def __init__(self, model_dim, num_of_heads, seq_len):
         super(EncoderLayer, self).__init__()
-        self.input_dimension = input_dimension
-        self.num_heads = num_heads
-        self.seq_len = seq_len
-        self.width_factor = width_factor
+        assert model_dim % num_of_heads == 0, f"model_dim {model_dim} is not divisible by num_of_heads {num_of_heads}"
+        self.head_dim = int(model_dim / num_of_heads)
 
-        self.multiheadattn = MultiheadAttention(input_dimension, num_heads, seq_len, mask=False)
-        self.positionwise_ff = PositionwiseFeedforward(input_dimension, width_factor=4)
-        self.layer_norm1 = nn.LayerNorm(input_dimension)
-        self.layer_norm2 = nn.LayerNorm(input_dimension)
+        self.multi_head_attention = MultiHeadAttention(model_dim, self.head_dim, num_of_heads, seq_len, masked=False)
+        self.layer_norm_1 = nn.LayerNorm(model_dim)
+        self.layer_norm_2 = nn.LayerNorm(model_dim)
+        self.position_wise_feed_forward = PositionWiseFeedForwardNet(model_dim)
 
+        
+        # Linear projection layers
+        self.linear_projection_q = nn.Linear(model_dim, self.head_dim * num_of_heads, bias=False)
+        self.linear_projection_k = nn.Linear(model_dim, self.head_dim * num_of_heads, bias=False)
+        self.linear_projection_v = nn.Linear(model_dim, self.head_dim * num_of_heads, bias=False)
 
-    def _linear_projection(self, X):
-        W = nn.Linear(X.size(-1), self.head_dim, bias=False)
-        return W(X)
+    def forward(self, input_tensors):
+        queries = self._linear_projection(self.linear_projection_q, input_tensors)
+        keys = self._linear_projection(self.linear_projection_k, input_tensors)
+        values = self._linear_projection(self.linear_projection_v, input_tensors)
 
+        attention_vectors = self.multi_head_attention(queries, keys, values)
+        attention_vectors = self.layer_norm_1(attention_vectors + input_tensors)
 
-    def forward(self, encoder_input):
-        encoder_output = self.multiheadattn(encoder_input, encoder_input, encoder_input)
-        encoder_output = encoder_output + encoder_input
-        encoder_output = self.layer_norm1(encoder_output)
+        feed_forward_output = self.position_wise_feed_forward(attention_vectors)
+        output = self.layer_norm_2(feed_forward_output + attention_vectors)
 
-        encoder_output_ff = self.positionwise_ff(encoder_output)
-        encoder_output = encoder_output_ff + encoder_output
-        encoder_output = self.layer_norm2(encoder_output)
+        return output
 
-        return encoder_output
+    def _linear_projection(self, linear_layer, X):
+        return linear_layer(X)
 
-
-
+    
 class DecoderLayer(nn.Module):
-    def __init__(self, input_dimension, num_heads, seq_len, width_factor=4):
+    def __init__(self, model_dim, num_of_heads, seq_len):
         super(DecoderLayer, self).__init__()
-        self.multiheadattn = MultiheadAttention(input_dimension, num_heads, seq_len, mask=True)
-        self.cross_attn = MultiheadAttention(input_dimension, num_heads, seq_len, mask =False)
-        self.positionwise_ff = PositionwiseFeedforward(input_dimension, width_factor)
+        assert model_dim % num_of_heads == 0, f"model_dim {model_dim} is not divisible by num_of_heads {num_of_heads}"
+        self.head_dim = int(model_dim / num_of_heads)
 
-        self.layer_norm1 = nn.LayerNorm(input_dimension)
-        self.layer_norm2 = nn.LayerNorm(input_dimension)
-        self.layer_norm3 = nn.LayerNorm(input_dimension)
+        self.masked_multi_head_attention = MultiHeadAttention(model_dim, self.head_dim, num_of_heads, seq_len, masked=True)
+        self.multi_head_attention = MultiHeadAttention(model_dim, self.head_dim, num_of_heads, seq_len, masked=False)
+        self.layer_norm_1 = nn.LayerNorm(model_dim)
+        self.layer_norm_2 = nn.LayerNorm(model_dim)
+        self.layer_norm_3 = nn.LayerNorm(model_dim)
+        self.position_wise_feed_forward = PositionWiseFeedForwardNet(model_dim)
+        
+        # Linear projection layers
+        self.linear_projection_q = nn.Linear(model_dim, self.head_dim * num_of_heads, bias=False)
+        self.linear_projection_k = nn.Linear(model_dim, self.head_dim * num_of_heads, bias=False)
+        self.linear_projection_v = nn.Linear(model_dim, self.head_dim * num_of_heads, bias=False)
 
+    def forward(self, encoder_output, decoder_input):
+        keys, queries, values = self._linear_projection(self.linear_projection_k, decoder_input), \
+                               self._linear_projection(self.linear_projection_q, decoder_input), \
+                               self._linear_projection(self.linear_projection_v, decoder_input)
 
-    def _linear_projection(self, X):
-        W = nn.Linear(X.size(-1), self.head_dim, bias=False)
-        return W(X)
+        masked_attention_vectors = self.masked_multi_head_attention(keys, queries, values)
+        masked_attention_vectors = self.layer_norm_1(masked_attention_vectors + decoder_input)
 
+        attention_vectors = self.multi_head_attention(
+            self._linear_projection(self.linear_projection_k, encoder_output),
+            queries,
+            self._linear_projection(self.linear_projection_v, encoder_output)
+        )
+        attention_vectors = self.layer_norm_2(attention_vectors + masked_attention_vectors)
 
-    def forward(self, decoder_input, encoder_output):
-        decoder_output = self.multiheadattn(decoder_input, decoder_input, decoder_input)
-        decoder_output = decoder_output + decoder_input
-        decoder_output = self.layer_norm1(decoder_output)
+        feed_forward_output = self.position_wise_feed_forward(attention_vectors)
+        output = self.layer_norm_3(feed_forward_output + attention_vectors)
 
-        decoder_output = self.cross_attn(decoder_output, encoder_output, encoder_output)
-        print(decoder_output)
-        decoder_output = self.layer_norm2(decoder_output)
-        print(decoder_output)
+        return output
 
-        decoder_output_ff = self.positionwise_ff(decoder_output)
-        decoder_output = decoder_output_ff + decoder_output
-        decoder_output = self.layer_norm3(decoder_output)
-
-        return decoder_output
-
-
+    def _linear_projection(self, linear_layer, X):
+        return linear_layer(X)
 
 
 class Encoder(nn.Module):
-    def __init__(self, emb_dim, vocab_size, seq_len, input_dimension, num_layers, num_heads, width_factor=4):
+    def __init__(self, embed_dim, num_of_layers, seq_len, num_of_heads):
         super(Encoder, self).__init__()
-
-        self.emb_dim = emb_dim
-
-        self.vocab_size = vocab_size
-        self.seq_len = seq_len
-        self.input_dimension = input_dimension
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.width_factor = width_factor
-
-        self.embeddinglayer = EmbeddingLayer(emb_dim, vocab_size,seq_len)
-        self.layers = nn.ModuleList(EncoderLayer(input_dimension, num_heads, seq_len, width_factor=4) for i in range(num_layers))
-
-
-    def forward(self, encoder_input):
-
-        encoder_output = self.embeddinglayer(encoder_input)
-        for layer in self.layers:
-            encoder_output = layer(encoder_output)
-
-        return encoder_output
-
-
-
-
-class Decoder(nn.Module):
-    def __init__(self, emb_dim, vocab_size, seq_len, input_dimension, num_layers, num_heads, width_factor=4):
-        super(Decoder, self).__init__()
-        self.input_dimension = input_dimension
-        self.num_layers = num_layers
-        self.emb_dim = emb_dim
-        self.vocab_size = vocab_size
-        self.num_heads = num_heads
-        self.seq_len = seq_len
-        self.width_factor = width_factor
-        self.embeddinglayer = EmbeddingLayer(emb_dim, vocab_size,seq_len)
-        self.layers = nn.ModuleList([DecoderLayer(input_dimension, num_heads, seq_len, width_factor=4) for i in range(num_layers)])
-
-
-    def forward(self, decoder_input, encoder_output):
-        decoder_output = self.embeddinglayer(decoder_input)
-
-        for layer in self.layers:
-            decoder_output = layer(decoder_output, encoder_output)
-
-        return decoder_output
-
-
-
-class Transformer(nn.Module):
-    def __init__(self, emb_dim, source_vocab_size, target_vocab_size, source_seq_len, target_seq_len,  input_dimension, num_heads, num_layers, width_factor=4):
-        super(Transformer, self).__init__()
-        self.source_vocab_size = source_vocab_size
-        self.target_vocab_size = target_vocab_size
-        self.source_seq_len = source_seq_len
-        self.target_seq_len = target_seq_len
-        self.emb_dim = emb_dim
-        self.num_heads = num_heads
-        self.num_layers = num_layers
-        
-        
-        self.encoder = Encoder(emb_dim, source_vocab_size, source_seq_len, input_dimension, num_layers, num_heads, width_factor)
-        
-        self.decoder = Decoder(emb_dim, target_vocab_size, target_seq_len, input_dimension, num_layers, num_heads, width_factor)
-        self.positionwise_feedforward = PositionwiseFeedforward(emb_dim, target_vocab_size)
-        
-        
-    def forward(self, source, target):
-        #encoder forward pass
-        encoder_output = self.encoder(source)
-        #decoder forward pass
-        output = self.decoder(target, encoder_output)
-
-        output = self.positionwise_feedforward(output)
+        self.num_of_layers = num_of_layers
+        self.encoder_layers = nn.ModuleList([EncoderLayer(embed_dim, num_of_heads, seq_len) for _ in range(num_of_layers)])
     
+    def forward(self, source_embeddings):
+        output = source_embeddings
+        for encoder_layer in self.encoder_layers:
+            output = encoder_layer(output)
         return output
+    
+class Decoder(nn.Module):
+    def __init__(self, vocab_size, embed_dim, num_of_layers, seq_len, num_of_heads):
+        super(Decoder, self).__init__()
+        self.num_of_layers = num_of_layers
+        self.decoder_layers = nn.ModuleList([DecoderLayer(embed_dim, num_of_heads, seq_len) for _ in range(num_of_layers)])
+        self.linear = nn.Linear(embed_dim, vocab_size)
 
+    def forward(self, encoder_output, target_embeddings):
+        output = target_embeddings
+        for decoder_layer in self.decoder_layers:
+            output = decoder_layer(encoder_output, output)
+        return nn.functional.log_softmax(self.linear(output), dim=-1)
+    
+class Transformer(nn.Module):
+    def __init__(self, vocab_size, emb_dim, num_of_layers, seq_len, num_of_heads):
+        super(Transformer, self).__init__()
+        self.embeddings = EmbeddingLayer(vocab_size, emb_dim, seq_len)
+        self.encoder = Encoder(emb_dim, num_of_layers, seq_len, num_of_heads)
+        self.decoder = Decoder(vocab_size, emb_dim, num_of_layers, seq_len, num_of_heads)
+        self.linear = nn.Linear(emb_dim, vocab_size)
+
+    def forward(self, source, target):
+        source_embeddings = self.embeddings(source)
+        target_embeddings = self.embeddings(target)
+
+        encoder_output = self.encoder(source_embeddings)
+        decoder_output = self.decoder(encoder_output, target_embeddings)
+        output = self.linear(decoder_output)

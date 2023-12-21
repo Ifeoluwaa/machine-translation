@@ -8,14 +8,19 @@ class ConfigBase:
     def initialization(self):
         self.parser.add_argument("dataset_path", type=str,
                             help="dataset file. Should be a txt file.")
-        self.parser.add_argument("--source_vocab_size", type=int, default=7000,
+        #self.parser.add_argument("--source_vocab_size", type=int, default=7000,
+                            #help="Vocabulary size. Vocabulary is created with byte-level byte pair encoding")
+        self.parser.add_argument("--vocab_size", type=int, default=7000,
                             help="Vocabulary size. Vocabulary is created with byte-level byte pair encoding")
         self.parser.add_argument("--learning_rate", type=float, default=1e-5, help="starting learning rate")
-        self.parser.add_argument("--target_vocab_size", type=int, default=7000,
-                            help="Vocabulary size. Vocabulary is created with byte-level byte pair encoding")
-        self.parser.add_argument("--source_seq_len", type=int, default=40, help="Maximum sequence length for the source language")
-        self.parser.add_argument("--target_seq_len", type=int, default=40, help="Maximum sequence length for the target language")
-        self.parser.add_argument("--input_dimension", type=int, default=8, help="Dimension of the input")
+        #self.parser.add_argument("--target_vocab_size", type=int, default=7000,
+                            #help="Vocabulary size. Vocabulary is created with byte-level byte pair encoding")
+        self.parser.add_argument("--seq_len", type=int, default=50, help="Maximum sequence length for the two languages")
+        self.parser.add_argument("--use_amp", action="store_true", help="Enable automatic mixed precision training")
+
+        #self.parser.add_argument("--source_seq_len", type=int, default=40, help="Maximum sequence length for the source language")
+        #self.parser.add_argument("--target_seq_len", type=int, default=40, help="Maximum sequence length for the target language")
+        #self.parser.add_argument("--input_dimension", type=int, default=8, help="Dimension of the input")
 
         self.parser.add_argument("--emb_dim", type=int, default=260,
                             help="Embedding dimension. Make sure this argument is a multiple of attention heads")

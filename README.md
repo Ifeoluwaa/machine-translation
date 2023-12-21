@@ -20,5 +20,5 @@ The dataset has two corpora; one for 'english' and the other for 'yoruba'. The e
 **Training**
 It is advisable to use GPU.
 
-[$ python train.py dataset_path --source_vocab_size=source_vocab_size --target_vocab_size=target_vocab_size --source_seq_len --target_seq_len --emb_dim=256 --num_layers=4 --num_heads=4 --EPOCHS=2 --input_dimension=8 --epochs_log --batch_size --num_accumulation_steps --tokenizer=path-to-tokenizer]
+[$ !python train.py "/content/drive/MyDrive/eng_yor_data.xlsx" --vocab_size 7000 --seq_len 50 --emb_dim 256 --num_layers 4 --num_heads 4 --EPOCHS 2 --epochs_log 1 --batch_size 16 --num_accumulation_steps 4 --eng_tokenizer=eng_tokenizer.json --yor_tokenizer=yor_tokenizer.json]
 
