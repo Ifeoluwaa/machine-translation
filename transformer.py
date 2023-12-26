@@ -27,8 +27,13 @@ class EncoderLayer(nn.Module):
         values = self._linear_projection(self.linear_projection_v, input_tensors)
 
         attention_vectors = self.multi_head_attention(queries, keys, values)
+        #attention_vectors = self.layer_norm_1(attention_vectors + input_tensors)
+
+        print("Attention Vectors Size:", attention_vectors.size())
+        print("Input Tensors Size:", input_tensors.size())
         attention_vectors = self.layer_norm_1(attention_vectors + input_tensors)
 
+        
         feed_forward_output = self.position_wise_feed_forward(attention_vectors)
         output = self.layer_norm_2(feed_forward_output + attention_vectors)
 

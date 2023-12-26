@@ -48,32 +48,6 @@ class CharacterTokenizer:
             characters.append(self.vocab_map.get(id, 0))
 
         return characters
-
-import pandas as pd
-
-def readandreprocessesdata(file_path: str='eng_yor_data.xlsx') -> List[List[str]]:
-    try:
-        # Use openpyxl engine
-        data_file = pd.read_excel(file_path, index_col='ID', engine='openpyxl')
-    except FileNotFoundError:
-        print(f"File not found: {file_path}")
-        return []
-
-    def read_lines(df):
-        n_rows = df.shape[0]
-        for row in range(n_rows):
-            contents = df.iloc[row]
-            yield [contents["english"].lower(), contents["yoruba"].lower()]
-
-    dataset = []
-    line_iter = iter(read_lines(data_file))
-
-    for eng, yor in line_iter:
-        dataset.append([clean_data(eng), clean_data(yor)])
-
-    return dataset
-
-#resulting_dataset = read_and_preprocess_data(file_path)
     
 def train_test_split(corpus, train_size, shuffle=False):
     if shuffle:

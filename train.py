@@ -23,39 +23,37 @@ USE_AMP = True  # Use Gradient scaler and mixed precision
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 class CorpusDataset(Dataset):
-    def __init__(self, data, vocab_size):
+    def __init__(self, data, seq_len):
         self.data = data
+        self.seq_len = seq_len
         self.n_data = len(data)
-        self.vocab_size = vocab_size
 
     def __len__(self):
-        return self.n_data
+        return self.n_data - self.seq_len
 
     def __getitem__(self, idx):
-        X = torch.LongTensor(self.data[idx: idx + self.vocab_size])
-        y = torch.LongTensor(self.data[idx + 1: idx + 1 + self.vocab_size])
+        X = torch.LongTensor(self.data[idx: idx + self.seq_len])
+        y = torch.LongTensor(self.data[idx + 1: idx + 1 + self.seq_len])
 
         return X, y
 
 class NaiveDataLoader:
-    def __init__(self, data, vocab_size, batch_size):
+    def __init__(self, data, seq_len, batch_size):
         self.data = data
-        self.n_data = len(data)
-        self.vocab_size = vocab_size
+        self.seq_len = seq_len
         self.batch_size = batch_size
-        self.n_batches = int(self.n_data / self.batch_size)
+        self.n_batches = int(len(data) / self.batch_size)
 
     def __len__(self):
         return self.batch_size
 
     def get_batch(self):
         for _ in range(self.n_batches):
-            idx1 = torch.randint(len(self.data) - self.vocab_size, (self.batch_size,))
-            idx2 = torch.randint(len(self.data) - self.vocab_size, (self.batch_size,))
-            X = torch.stack([torch.LongTensor(self.data[i: i+self.vocab_size]) for i in idx1])
-            y = torch.stack([torch.LongTensor(self.data[i+1: i+1+self.vocab_size]) for i in idx2])
+            idx = torch.randint(len(self.data) - self.seq_len, (self.batch_size,))
+            batches_X = [torch.LongTensor(self.data[i: i+self.seq_len]) for i in idx]
+            batches_Y = [torch.LongTensor(self.data[i+1: i+1+self.seq_len]) for i in idx]
 
-            yield X, y
+            yield torch.stack(batches_X), torch.stack(batches_Y)
 
 def evaluate(model, X_val, y_val, criterion, device):
     with torch.no_grad():
@@ -68,9 +66,8 @@ def evaluate(model, X_val, y_val, criterion, device):
 
 def main(opt):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = Transformer(opt.vocab_size, opt.emb_dim, opt.num_layers, opt.seq_len, opt.num_heads).to(device)
+    model = Transformer(opt.vocab_size, opt.emb_dim, opt.seq_len, opt.num_layers, opt.num_heads).to(device)
     
-    # Assuming these functions are defined in your utils.py file
     eng_bpe_tokenizer = eng_load_tokenizer(opt.eng_tokenizer)
     yor_bpe_tokenizer = yor_load_tokenizer(opt.yor_tokenizer)
 
@@ -80,8 +77,9 @@ def main(opt):
     eng_train_token_ids = CharacterTokenizer.tokenize_and_encode(train, eng_bpe_tokenizer)
     yor_train_token_ids = CharacterTokenizer.tokenize_and_encode(train, yor_bpe_tokenizer)
 
-    eng_train_dataloader = NaiveDataLoader(eng_train_token_ids, vocab_size=opt.vocab_size, batch_size=opt.batch_size)
-    yor_train_dataloader = NaiveDataLoader(yor_train_token_ids, vocab_size=opt.vocab_size, batch_size=opt.batch_size)
+    eng_train_dataloader = NaiveDataLoader(eng_train_token_ids, seq_len = opt.seq_len, batch_size=opt.batch_size)
+    yor_train_dataloader = NaiveDataLoader(yor_train_token_ids, seq_len = opt.seq_len, batch_size=opt.batch_size)
+
 
     criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.learning_rate)

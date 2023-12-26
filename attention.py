@@ -19,8 +19,6 @@ class Attention(nn.Module):
             scores = scores.masked_fill(self.tril==0, float("-inf"))
             
         attention_weights = self.softmax(scores)
-        attention_weights = self.attention_dropout(attention_weights)
-        
         attention_vectors = torch.matmul(attention_weights, values)
         return attention_vectors
     
@@ -37,7 +35,7 @@ class MultiHeadAttention(nn.Module):
         self.W_o = nn.Linear(num_of_heads*self.head_dim, model_dim, bias=False)
         
     def _linear_projection(self, X):
-        W = nn.Linear(X.size(-1), self.head_dim, bias=False)
+        W = nn.Linear(X.size(-1), self.head_dim, bias=False).to(X.device)
         return W(X)
         
     def forward(self, keys, queries, values):
