@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 
 class EmbeddingLayer(nn.Module):
     def __init__(self, vocab_size, emb_dim, seq_len):
@@ -18,9 +19,9 @@ class EmbeddingLayer(nn.Module):
         return input_ids
 
     def _generate_positional_encoding(self, emb_dim, seq_len):
-        pe = torch.zeros(seq_len, emb_dim)
-        position = torch.arange(0, seq_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, emb_dim, 2) * -(math.log(10000.0) / emb_dim))
+        pe = torch.zeros(40, 256)
+        position = torch.arange(0, 40).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, 256, 2) * -(math.log(10000.0) / 256))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)

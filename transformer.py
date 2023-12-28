@@ -108,10 +108,10 @@ class Decoder(nn.Module):
         output = target_embeddings
         for decoder_layer in self.decoder_layers:
             output = decoder_layer(encoder_output, output)
-        return nn.functional.log_softmax(self.linear(output), dim=-1)
+        return output
     
 class Transformer(nn.Module):
-    def __init__(self, vocab_size, emb_dim, num_of_layers, seq_len, num_of_heads):
+    def __init__(self, vocab_size, emb_dim, seq_len, num_of_layers, num_of_heads):
         super(Transformer, self).__init__()
         self.embeddings = EmbeddingLayer(vocab_size, emb_dim, seq_len)
         self.encoder = Encoder(emb_dim, num_of_layers, seq_len, num_of_heads)

@@ -1,5 +1,4 @@
 import pandas as pd
-from transformer import AutoTokenizer
 import torch 
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -118,7 +117,7 @@ def main(opt):
                 optimizer.zero_grad()
 
                 # Print or log training loss
-                if (j + 1) % opt.print_every == 0:
+                if (j + 1) % 10 == 0:
                     print(f"Epoch {epoch+1}, Batch {j+1}, Train loss: {loss.item()}")
 
         model.eval()
