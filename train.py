@@ -59,13 +59,13 @@ def evaluate(model, X_val, y_val, criterion, device):
         X_val = X_val.to(device)
         y_val = y_val.to(device)
         with torch.cuda.amp.autocast(enabled=True):  # Enable autocast
-            y_pred = model(X_val)
+            y_pred = model(X_val, y_val)
             val_loss = criterion(y_pred.view(-1, y_pred.size(-1)), y_val.view(-1))
             return val_loss
 
 def main(opt):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = Transformer(opt.vocab_size, opt.emb_dim, opt.seq_len, opt.num_layers, opt.num_heads).to(device)
+    model = Transformer(opt.vocab_size, opt.emb_dim, opt.seq_len, opt.num_layers, opt.num_heads, opt.dropout_probability).to(device)
     
     eng_bpe_tokenizer = eng_load_tokenizer(opt.eng_tokenizer)
     yor_bpe_tokenizer = yor_load_tokenizer(opt.yor_tokenizer)
@@ -123,8 +123,8 @@ def main(opt):
         model.eval()
 
         # Use the validation data loader to get batches for evaluation
-        X_val, y_val = next(zip(eng_train_dataloader.get_batch(), yor_train_dataloader.get_batch()))
-        X_val = X_val.to(device)  # Move validation data to the same device
+        X_val, y_val = next(yor_train_dataloader.get_batch())
+        X_val = X_val.to(device)
         y_val = y_val.to(device)
         val_loss = evaluate(model, X_val, y_val, criterion=criterion, device=device)
         print(f"At epoch {epoch+1}, Train loss: {loss.item()}      Val loss: {val_loss.item()}")
